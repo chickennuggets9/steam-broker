@@ -1,13 +1,14 @@
+use std::cmp::min;
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::net::SocketAddrV4;
 use std::net::UdpSocket;
-use std::io::ErrorKind;
+use std::str;
 use std::thread::sleep;
 use std::time::Duration;
-use std::cmp::min;
 
 use steamworks::SteamId;
-use steamworks::{ Client, User};
+use steamworks::{Client, User};
 
 // TODO:
 // 1. Move steam iniitialization to sb_connect handler
@@ -17,93 +18,83 @@ use steamworks::{ Client, User};
 fn handle_connect(user: &User, buf: &[u8], from: SocketAddr, sock: &UdpSocket) {
     // sb_connect <ip:port> <server's steam id> <secure> <challenge>
 
-    match std::str::from_utf8(buf) {
-        Ok(x) => {
-            println!("handle_connect: {x}");
+    let Ok(x) = str::from_utf8(buf) else {
+        return;
+    };
 
-            let args: Vec<&str> = x.split(" ").collect();
+    println!("handle_connect: {x}");
 
-            // bruh refactor that
-            let serveradr: SocketAddrV4 = match args[1].parse() {
-                Ok(x) => x,
-                _ => {
-                    println!("can't parse ip addr");
-                    return
-                }
-            };
+    let args: Vec<&str> = x.split(" ").collect();
 
-            let game_server_steam_id = SteamId::from_raw(match args[2].parse() {
-                Ok(x) => x,
-                _ => {
-                    println!("can't parse steam id");
-                    return;
-                },
-            });
+    // bruh refactor that
+    let Ok(serveradr) = args[1].parse::<SocketAddrV4>() else {
+        println!("can't parse ip addr");
+        return;
+    };
 
-            let secure: bool = match args[3].parse() {
-                Ok(x) => x,
-                _ => {
-                    println!("can't parse secure");
-                    return;
-                },
-            };
+    let Ok(game_server_steam_id) = args[2].parse().map(SteamId::from_raw) else {
+        println!("can't parse steam id");
+        return;
+    };
 
-            let challenge: i32 = match args[4].parse() {
-                Ok(x) => x,
-                _ => {
-                    println!("can't parse challenge");
-                    return;
-                },
-            };
+    let Ok(secure) = args[3].parse::<bool>() else {
+        println!("can't parse secure");
+        return;
+    };
 
-            println!("initiate_game_connection: {serveradr} {:?} {secure} {challenge}", game_server_steam_id.raw());
-            let ticket = user.initiate_game_connection(game_server_steam_id, serveradr.ip().to_bits(), serveradr.port(), secure);
+    let Ok(challenge) = args[4].parse::<i32>() else {
+        println!("can't parse challenge");
+        return;
+    };
 
-            println!("steam ticket size: {:?}, sending to {from}", ticket.len());
-            println!("ticket data: {:?}", ticket);
+    println!(
+        "initiate_game_connection: {serveradr} {:?} {secure} {challenge}",
+        game_server_steam_id.raw()
+    );
+    let ticket = user.initiate_game_connection(
+        game_server_steam_id,
+        serveradr.ip().to_bits(),
+        serveradr.port(),
+        secure,
+    );
 
-            // now construct response
-            // sb_connect\n<4 byte challenge><8 byte steamid><unsigned 4 byte len><len bytes ticket>
-            let mut response = Vec::from(b"\xff\xff\xff\xffsb_connect\n");
-            response.extend(challenge.to_le_bytes());
-            response.extend(user.steam_id().raw().to_le_bytes());
-            response.extend((ticket.len() as u32).to_le_bytes());
-            response.extend(ticket);
+    println!("steam ticket size: {:?}, sending to {from}", ticket.len());
+    println!("ticket data: {:?}", ticket);
 
-            match sock.send_to(&response, from) {
-                Err(e) => {
-                    println!("error sending: {e}");
-                    return;
-                },
-                Ok(x) => x
-            };
-        },
-        _ => return,
+    // now construct response
+    // sb_connect\n<4 byte challenge><8 byte steamid><unsigned 4 byte len><len bytes ticket>
+    let mut response = Vec::from(b"\xff\xff\xff\xffsb_connect\n");
+    response.extend(challenge.to_le_bytes());
+    response.extend(user.steam_id().raw().to_le_bytes());
+    response.extend((ticket.len() as u32).to_le_bytes());
+    response.extend(ticket);
+
+    if let Err(e) = sock.send_to(&response, from) {
+        println!("error sending: {e}");
     }
 }
 
 fn handle_terminate(user: &User, buf: &[u8]) {
     // sb_terminate <ip:port> <challenge>
-    match std::str::from_utf8(buf) {
-        Ok(x) => {
-            let args: Vec<&str> = x.split(" ").collect();
+    let Ok(x) = str::from_utf8(buf) else {
+        return;
+    };
 
-            // bruh refactor that
-            let serveradr: SocketAddrV4 = match args[1].parse() {
-                Ok(x) => x,
-                _ => return,
-            };
+    let args: Vec<&str> = x.split(" ").collect();
 
-            // TODO: validate server challenge
-            // let challenge: i32 = match args[2].parse() {
-            //     Ok(x) => x,
-            //     _ => return,
-            // };
+    // bruh refactor that
+    let Ok(serveradr) = args[1].parse::<SocketAddrV4>() else {
+        // TODO: return an error?
+        return;
+    };
 
-            user.terminate_game_connection(serveradr.ip().to_bits(), serveradr.port());
-        },
-        _ => return,
-    }
+    // TODO: validate server challenge
+    let Ok(_challenge) = args[2].parse::<i32>() else {
+        // TODO: return an error?
+        return;
+    };
+
+    user.terminate_game_connection(serveradr.ip().to_bits(), serveradr.port());
 }
 
 fn main() {
