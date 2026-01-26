@@ -1,4 +1,5 @@
 use std::{
+    cell::OnceCell,
     io::{Cursor, ErrorKind, Write},
     net::{SocketAddr, SocketAddrV4, UdpSocket},
     thread::sleep,
@@ -32,9 +33,16 @@ impl SteamApi {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum State {
+    Ready,
+    TicketRequsted { challenge: i32 },
+}
+
 pub struct Broker {
     sock: UdpSocket,
-    api: Option<SteamApi>,
+    api: OnceCell<SteamApi>,
+    state: State,
 }
 
 impl Broker {
@@ -43,7 +51,11 @@ impl Broker {
         let sock = UdpSocket::bind(addr).map_err(BrokerError::CreateSocket)?;
         println!("Started UDP server at {addr}");
 
-        Ok(Self { sock, api: None })
+        Ok(Self {
+            sock,
+            api: OnceCell::new(),
+            state: State::Ready,
+        })
     }
 
     fn handle_connect(&mut self, args: &[u8], from: &SocketAddr) -> Result<(), BrokerError> {
@@ -56,15 +68,17 @@ impl Broker {
         let secure: bool = args.parse("secure")?;
         let challenge: i32 = args.parse("challenge")?;
 
-        let api = match &self.api {
-            Some(api) => {
-                // FIXME: what if api is already initialized?
-                println!("warning: steam api is already initialized");
-                api
-            }
+        if self.state != State::Ready {
+            // FIXME: what if we didn't receive a terminate request from a client?
+            return Err(BrokerError::Custom("ticket already requested"));
+        }
+
+        // TODO: replace with OnceCell::get_or_try_init when stabilized
+        let api = match self.api.get() {
+            Some(api) => api,
             None => {
-                self.api = Some(SteamApi::new()?);
-                self.api.as_ref().unwrap()
+                let api = SteamApi::new()?;
+                self.api.get_or_init(|| api)
             }
         };
 
@@ -77,6 +91,7 @@ impl Broker {
             serveradr.port(),
             secure,
         );
+        self.state = State::TicketRequsted { challenge };
 
         println!("steam ticket size: {:?}, sending to {from}", ticket.len());
         println!("ticket data: {:?}", ticket);
@@ -101,17 +116,24 @@ impl Broker {
 
         // sb_terminate <ip:port> <challenge>
         let serveradr: SocketAddrV4 = args.parse("ip addr")?;
-        let _challenge: i32 = args.parse("challenge")?;
+        let challenge: i32 = args.parse("challenge")?;
 
-        // TODO: validate server challenge
+        let State::TicketRequsted { challenge: c } = self.state else {
+            return Err(BrokerError::Custom("ticket is not requested"));
+        };
 
-        if let Some(api) = &self.api {
-            api.user
-                .terminate_game_connection(serveradr.ip().to_bits(), serveradr.port());
-        } else {
-            // FIXME: what if api is not initialized?
-            println!("warning: steam api is not initialized");
+        // TODO: check client ip?
+
+        if c != challenge {
+            return Err(BrokerError::Custom("invalid challenge"));
         }
+
+        self.api
+            .get()
+            .expect("initialized steam api")
+            .user
+            .terminate_game_connection(serveradr.ip().to_bits(), serveradr.port());
+        self.state = State::Ready;
 
         Ok(())
     }
@@ -120,10 +142,11 @@ impl Broker {
         let mut buf = [0; 1024];
 
         loop {
-            if let Some(api) = &self.api {
+            if let Some(api) = self.api.get() {
                 api.client.run_callbacks();
             }
 
+            // TODO: set socket timeout?
             let (buf, from) = match self.sock.recv_from(&mut buf) {
                 Ok((n, from)) => (&buf[..n], from),
                 Err(e) => match e.kind() {

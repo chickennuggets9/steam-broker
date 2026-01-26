@@ -20,12 +20,15 @@ impl<'a> Args<'a> {
         self.data
     }
 
+    pub fn next(&mut self) -> Option<&str> {
+        self.iter.next()
+    }
+
     pub fn parse<T>(&mut self, msg: &'static str) -> Result<T, BrokerError>
     where
         T: FromStr,
     {
-        self.iter
-            .next()
+        self.next()
             .ok_or(BrokerError::Missing(msg))?
             .parse()
             .map_err(|_| BrokerError::Parse(msg))

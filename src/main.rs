@@ -24,6 +24,8 @@ enum BrokerError {
     Missing(&'static str),
     #[error("failed to parse \"{0}\"")]
     Parse(&'static str),
+    #[error("{0}")]
+    Custom(&'static str),
 }
 
 fn main() {
