@@ -37,6 +37,7 @@ name = "steam-broker"
 version = "0.1.0"
 dependencies = [
  "steamworks",
+ "thiserror",
 ]
 
 [[package]]
