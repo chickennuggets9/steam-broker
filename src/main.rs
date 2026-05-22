@@ -33,7 +33,7 @@ fn main() {
 
     match Broker::new() {
         Ok(mut broker) => {
-            if let Ok(err) = broker.run() {
+            if let Err(err) = broker.run() {
                 println!("error: {err:?}");
                 process::exit(1);
             }
