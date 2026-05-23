@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "steam-broker"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "fastrand",
  "steamworks",
@@ -49,8 +49,8 @@ dependencies = [
 
 [[package]]
 name = "steamworks"
-version = "0.12.2"
-source = "git+https://github.com/a1batross/steamworks-rs?branch=master#6b5b5a21ac7c55de3f02a21145adc6bc3c650724"
+version = "0.13.1"
+source = "git+https://github.com/a1batross/steamworks-rs?rev=1ca2867#1ca2867fd14688d76bb3d896f5e606ab43ad36c6"
 dependencies = [
  "bitflags",
  "paste",
@@ -60,8 +60,8 @@ dependencies = [
 
 [[package]]
 name = "steamworks-sys"
-version = "0.12.0"
-source = "git+https://github.com/a1batross/steamworks-rs?branch=master#6b5b5a21ac7c55de3f02a21145adc6bc3c650724"
+version = "0.13.0"
+source = "git+https://github.com/a1batross/steamworks-rs?rev=1ca2867#1ca2867fd14688d76bb3d896f5e606ab43ad36c6"
 
 [[package]]
 name = "syn"

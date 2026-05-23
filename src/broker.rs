@@ -313,12 +313,11 @@ impl Session<'_> {
         println!(
             "initiate_game_connection: {serveradr} {game_server_steam_id} {secure} {challenge}"
         );
-        let ticket = api.user.initiate_game_connection(
-            SteamId::from_raw(game_server_steam_id),
-            serveradr.ip().to_bits(),
-            serveradr.port(),
-            secure,
-        );
+        #[allow(deprecated)]
+        let ticket = api
+            .user
+            .initiate_game_connection(SteamId::from_raw(game_server_steam_id), serveradr, secure)
+            .ok_or(BrokerError::Custom("steam refused to issue auth ticket"))?;
 
         self.state = State::TicketRequested {
             challenge,
@@ -363,8 +362,8 @@ impl Session<'_> {
             .api
             .as_ref()
             .expect("steam api initialized in ticket state");
-        api.user
-            .terminate_game_connection(serveradr.ip().to_bits(), serveradr.port());
+        #[allow(deprecated)]
+        api.user.terminate_game_connection(serveradr);
 
         self.state = State::Active;
         Ok(())
@@ -388,8 +387,8 @@ impl Session<'_> {
         if let State::TicketRequested { serveradr, .. } = self.state {
             if let Some(api) = self.api.as_ref() {
                 println!("cleaning up dangling ticket for {serveradr}");
-                api.user
-                    .terminate_game_connection(serveradr.ip().to_bits(), serveradr.port());
+                #[allow(deprecated)]
+                api.user.terminate_game_connection(serveradr);
             }
             self.state = State::Active;
         }
