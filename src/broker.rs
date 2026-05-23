@@ -148,6 +148,10 @@ impl Broker {
                 }
                 Err(err) => {
                     println!("session error: {err}");
+                    if self.api.is_some() {
+                        println!("steam was initialized, exiting for restart");
+                        return Ok(());
+                    }
                 }
             }
         }
@@ -172,6 +176,10 @@ impl Session<'_> {
                 ReadOutcome::Closed => {
                     println!("connection closed by peer");
                     self.cleanup_active_ticket();
+                    if self.api.is_some() {
+                        println!("steam was initialized, treating disconnect as sb_terminate");
+                        return Ok(SessionResult::Terminate);
+                    }
                     return Ok(SessionResult::Continue);
                 }
                 ReadOutcome::DataOrIdle => {}
