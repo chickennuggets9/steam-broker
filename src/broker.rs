@@ -329,8 +329,7 @@ impl Session<'_> {
 
         // payload: "sb_connect\n" + i32 challenge LE + u64 steamid LE + u32 size LE + ticket
         let steam_id = api.user.steam_id().raw();
-        let mut payload =
-            Vec::with_capacity(RESPONSE_HEADER.len() + 4 + 8 + 4 + ticket.len());
+        let mut payload = Vec::with_capacity(RESPONSE_HEADER.len() + 4 + 8 + 4 + ticket.len());
         payload.extend_from_slice(RESPONSE_HEADER);
         payload.extend_from_slice(&challenge.to_le_bytes());
         payload.extend_from_slice(&steam_id.to_le_bytes());
@@ -376,15 +375,12 @@ impl Session<'_> {
             return Err(BrokerError::Custom("response payload too large"));
         }
 
-        let mut frame =
-            Vec::with_capacity(FRAME_HEADER_SIZE + FRAME_LENGTH_SIZE + payload.len());
+        let mut frame = Vec::with_capacity(FRAME_HEADER_SIZE + FRAME_LENGTH_SIZE + payload.len());
         frame.extend_from_slice(FRAME_HEADER);
         frame.extend_from_slice(&(payload.len() as u16).to_le_bytes());
         frame.extend_from_slice(payload);
 
-        self.stream
-            .write_all(&frame)
-            .map_err(BrokerError::Send)?;
+        self.stream.write_all(&frame).map_err(BrokerError::Send)?;
         Ok(())
     }
 
