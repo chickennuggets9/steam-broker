@@ -34,17 +34,30 @@ case "${1:-}" in
 		;;
 esac
 
-echo "Building release binary..."
-cargo build --release --manifest-path "$PROJECT_DIR/Cargo.toml"
+if [ -f "$PROJECT_DIR/Cargo.toml" ]; then
+	echo "Building release binary..."
+	cargo build --release --manifest-path "$PROJECT_DIR/Cargo.toml"
 
-LIB_SRC=$( ls "$PROJECT_DIR"/target/release/build/steamworks-sys-*/out/libsteam_api.so 2>/dev/null | head -n1 )
-if [ -z "$LIB_SRC" ] || [ ! -f "$LIB_SRC" ]; then
-	echo "error: libsteam_api.so not found under target/release/build/steamworks-sys-*/out/" >&2
-	exit 1
+	BIN_SRC="$PROJECT_DIR/target/release/steam-broker"
+	LIB_SRC=$( ls "$PROJECT_DIR"/target/release/build/steamworks-sys-*/out/libsteam_api.so 2>/dev/null | head -n1 )
+	if [ -z "$LIB_SRC" ] || [ ! -f "$LIB_SRC" ]; then
+		echo "error: libsteam_api.so not found under target/release/build/steamworks-sys-*/out/" >&2
+		exit 1
+	fi
+else
+	# Bundled archive: binary and libsteam_api.so sit next to this script.
+	BIN_SRC="$SCRIPT_DIR/steam-broker"
+	LIB_SRC="$SCRIPT_DIR/libsteam_api.so"
+	for f in "$BIN_SRC" "$LIB_SRC" "$SCRIPT_DIR/$UNIT_NAME"; do
+		if [ ! -f "$f" ]; then
+			echo "error: $f not found (expected bundled archive layout)" >&2
+			exit 1
+		fi
+	done
 fi
 
 echo "Installing binary into $PREFIX/bin..."
-install -v -Dm755 "$PROJECT_DIR/target/release/steam-broker" "$PREFIX/bin/steam-broker"
+install -v -Dm755 "$BIN_SRC" "$PREFIX/bin/steam-broker"
 
 echo "Installing libsteam_api.so into $LIB_DIR..."
 install -v -Dm755 "$LIB_SRC" "$LIB_DIR/libsteam_api.so"
