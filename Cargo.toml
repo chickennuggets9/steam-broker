@@ -1,7 +1,9 @@
 [package]
 name = "steam-broker"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
-steamworks = { branch = "master", git = "https://github.com/a1batross/steamworks-rs" }
+fastrand = "2"
+thiserror = "2"
+steamworks = { rev = "1ca2867", git = "https://github.com/a1batross/steamworks-rs" }

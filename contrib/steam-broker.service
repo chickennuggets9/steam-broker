@@ -1,0 +1,13 @@
+[Unit]
+Description=Xash3D FWGS Steam API broker
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steam-broker
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,104 @@
+name: "test, compile and deploy"
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo check --workspace --all-targets
+      - run: cargo check --workspace --all-targets --no-default-features
+      - run: cargo check --workspace --all-targets --all-features
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - run: cargo clippy --workspace --all-targets
+      - run: cargo clippy --workspace --all-targets --no-default-features
+      - run: cargo clippy --workspace --all-targets --all-features
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+      - name: Rustfmt Check
+        uses: actions-rust-lang/rustfmt@v1
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo test --workspace --all-features
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        platform:
+          - target: x86_64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: houseabsolute/actions-rust-cross@v1
+        with:
+            target: ${{ matrix.platform.target }}
+            args: "--locked --release --workspace"
+            strip: true
+      - run: |
+          mkdir -p staging/ artifacts/
+          find target/${{ matrix.platform.target }}/release -maxdepth 1 -type f -executable -exec cp {} staging/ ';'
+          find target/${{ matrix.platform.target }}/release/build -path '*/steamworks-sys-*/out/libsteam_api.so' -exec cp {} staging/ ';'
+          cp contrib/install.sh contrib/steam-broker.service staging/
+          pushd staging/
+            tar --zstd -cvf ../artifacts/steam-broker-${{ matrix.platform.target }}.tar.zst *
+          popd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artifact-${{ matrix.platform.target }}
+          path: artifacts/*
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.event_name == 'push' }}
+    steps:
+    - env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: ${{ github.ref_name == 'master' && 'continuous' || format('continuous-{0}', github.ref_name) }}
+      run: |
+        gh release delete "$RELEASE_TAG" \
+          --yes \
+          --cleanup-tag \
+          --repo "$GITHUB_REPOSITORY" || true
+        sleep 20s
+        gh run download "$GITHUB_RUN_ID" \
+          --dir artifacts/ \
+          --repo "$GITHUB_REPOSITORY"
+        pushd artifacts/
+        echo "Found artifacts:"
+        ls
+        for i in $(find -mindepth 1 -maxdepth 1 -type d); do
+          mv "$i"/* .
+          rm -rf "$i"
+        done
+        echo "Repackaged artifacts:"
+        ls -R
+        popd
+        sleep 20s
+        gh release create "$RELEASE_TAG" artifacts/* \
+          --title "steam-broker Continuous ${{ github.ref_name }} Build" \
+          --target $GITHUB_SHA \
+          --repo "$GITHUB_REPOSITORY" \
+          --prerelease
